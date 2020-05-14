@@ -1,2 +1,7 @@
-*.class
-*.log
+# Don't include IDE build files
+.metals/
+.bloop/
+.idea/
+
+# Don't include generated files
+build/
