@@ -7,4 +7,4 @@
 
 rootProject.name = 'file-ingest-service-poc'
 
-include 'web-server', 'cluster-node'
+include 'web-server', 'cluster-node', 'message-protocol'
