@@ -1,5 +1,6 @@
 def scalaVersionMajor ='2.12'
 def scalaVersionMinor ='2.12.8'
+def akkaVersion = '2.6.5'
 
 // -------- DEPENDENCIES --------
 // Sample dependencies
@@ -67,6 +68,8 @@ project(':cluster-node') {
     mainClassName = "bmaso.file_ingest_service_poc.cluster_node.MainCLI"
 
     dependencies {
+        compile project(':message-protocol')
+        compile group: 'com.typesafe.akka', name: "akka-persistence-typed_${scalaVersionMajor}", version: akkaVersion
     }
 
     jar {

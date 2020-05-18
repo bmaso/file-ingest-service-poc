@@ -49,13 +49,6 @@ can be described by the following finite state model.
   ** Upon successful cleansing the cleansed file is assumed to be ready for ingestion.
      The workflow transitions to state `StagedForIngestion`. A driver application will
      asynchronously receive a `FileIngestion.CleansingStageExited` notification.
-* State `StagedForIngestion`
-  ** This is a temporary state with no failure cases, representing an indeterminate
-     period while the workflow waits for available resources to perform file ingestion.
-  ** A driver application will be asynchronously sent a `FileIngestion.StagedForIngestionEntered`
-     notification when a workflow enters this state.
-  ** Eventually a workflow in this state will transition to the `Ingesting` state
-     without exception.
 * State `Ingesting`
   ** This is a temporary state which succeeds upon successfully completing ingestion,
      and fails if the ingestion step fails for any reason.
@@ -64,8 +57,8 @@ can be described by the following finite state model.
   ** The ingestion process is represented in the `cluster-node` internally as a `Future[_]`.
      (The future parameter type is specific to different file ingestion implementations.)
   ** If the ingestion process ends in error, then the workflow transitions
-     to the `Completed` state with completion result value of type `UnexpectedIngestingStageProblem`
-* State "Completed"
+     to the `Complete` state with completion result value of type `UnexpectedIngestingStageProblem`
+* State `Complete`
   ** This is a permanent state which is entered when the workflow completes successfully
      or when any unrecoverable problem is encountered during the execution of the workflow.
   ** A driver application will be asynchronously sent a `FileIngestion.CompletedEntered`
