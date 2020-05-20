@@ -1,6 +1,10 @@
 def scalaVersionMajor ='2.12'
 def scalaVersionMinor ='2.12.8'
 def akkaVersion = '2.6.5'
+def akkaJdbcPersistenceJournalVersion = '3.5.3'
+def h2DatabaseLibraryVersion = '1.4.200'
+def slickVersion = '3.3.2'
+def logbackVersion = '1.2.3'
 
 // -------- DEPENDENCIES --------
 // Sample dependencies
@@ -70,6 +74,19 @@ project(':cluster-node') {
     dependencies {
         compile project(':message-protocol')
         compile group: 'com.typesafe.akka', name: "akka-persistence-typed_${scalaVersionMajor}", version: akkaVersion
+        compile group: 'com.typesafe.akka', name: "akka-persistence-query_${scalaVersionMajor}", version: akkaVersion
+        compile group: 'com.typesafe.akka', name: "akka-cluster-typed_${scalaVersionMajor}", version: akkaVersion
+        compile group: 'com.typesafe.akka', name: "akka-cluster-sharding-typed_${scalaVersionMajor}", version: akkaVersion
+
+        // Akka Persistence Journal & Persistence Query JDBC plugin
+        compile group: 'com.github.dnvriend', name: "akka-persistence-jdbc_${scalaVersionMajor}", version: akkaJdbcPersistenceJournalVersion
+
+        // H2 JDBC driver used in integration and CLI smoke tests
+        testCompile group: 'com.h2database', name: 'h2', version: h2DatabaseLibraryVersion
+        testCompile group: 'com.typesafe.slick', name: "slick_${scalaVersionMajor}", version: slickVersion
+
+        // Logging in test CLIs and unit tests is done through logback
+        testCompile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
     }
 
     jar {

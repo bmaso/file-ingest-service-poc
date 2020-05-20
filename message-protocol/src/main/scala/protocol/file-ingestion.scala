@@ -47,10 +47,18 @@ object FileIngestion {
   /** Order to receive notification that an unrecoverable problem occurred with an asynchronous process (cleanse or upload) */
   case class ProblemsAcknowledgementOrder(problems: NonEmptyList[String]) extends Order
 
+  case class FileIngestStateRetrieveOrder(replyTo: ActorRef[CurrentState])
+    extends Order
+
   sealed trait State {
     def cycleId: String
     def dataFile: String
     def timeEnteredState: Instant
+  }
+  case object EmptyState extends State {
+    override val cycleId = null
+    override val dataFile = null
+    override val timeEnteredState = null
   }
   case class Enqueued(override val cycleId: String, override val dataFile: String, timeEnteredState: Instant)
     extends State
