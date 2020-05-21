@@ -41,7 +41,7 @@ object OneFileIngestLifecycleTestCLI {
     //   for shutdown when node comes down...
     val h2_server_? : Option[Server] =
       if(args.length >= 1 && args.contains("h2-database")) {
-        Some(startDatabaseServerSync(system))
+        Some(startDatabaseServerSync(system, args.contains("drop-tables")))
       } else None
 
     //...start this node...
@@ -89,34 +89,56 @@ object OneFileIngestLifecycleTestCLI {
         system.whenTerminated.onComplete(_ => server.shutdown())
       }
     }
+
+    println("Node Up! Press [ENTER] to quit")
+    Console.in.readLine()
+
+    system.whenTerminated.onComplete {
+      case Success(_) => System.exit(0)
+      case Failure(ex) =>
+        ex.printStackTrace
+        System.exit(-1)
+    }
+
+    system.terminate
   }
 
   def retrieveAndPrintState(entityRef: EntityRef[FileIngestion.Order]): Unit = {
     val status_fut =
       entityRef.ask[FileIngestion.CurrentState](ref => FileIngestion.FileIngestStateRetrieveOrder(ref))(5 seconds)
 
-    val state = Await.result(status_fut, 5 seconds)
-    println(s"Status 1, response to initial file order: $state")
+    val state = Await.result(status_fut, 120 seconds)
+    println(s"Status report order response: $state")
   }
 
   /**
    * Synchronously start a local H2 TCP database server. Should only be invoked by a single node in the cluster. All
    * nodes then should be configured with "localhost" in the slick DB URL.
    */
-  def startDatabaseServerSync(system: ActorSystem[ActorSystemRootActor.StartUp]): Server = {
+  def startDatabaseServerSync(system: ActorSystem[ActorSystemRootActor.StartUp], dropTables: Boolean = false): Server = {
     //...Start H2 server; The '-ifNotExists' flag tells H2 to create any databases when anyone attempt to open
     //   one. Without this flag then the database must be created ahead of time using the H2 Sheel or some other
     //   mechanism...
-    val h2_server = Server.createTcpServer("-tcp -ifNotExists").start()
+    val h2_server = Server.createTcpServer("-ifNotExists").start()
 
     //...create journal, snapshot, and offset tables if they don't exist yet. Akka config already
     //    includes H2 database configuration we can use to create DB connection...
     val db = Database.forConfig("slick.db", system.settings.config)
-    val inserts = {
-      val ddls = List(
-        sqlu"""
-                DROP TABLE IF EXISTS PUBLIC."journal";
-              """,
+
+    val drops =
+      if(dropTables)  {
+          List(
+            sqlu"""
+                  DROP TABLE IF EXISTS PUBLIC."journal";
+                """,
+            sqlu"""
+                  DROP TABLE IF EXISTS PUBLIC."snapshot";
+                """,
+          )
+        } else List.empty[DBIO[Int]]
+
+    val inserts =
+      List(
         sqlu"""
                 CREATE TABLE IF NOT EXISTS PUBLIC."journal" (
                 "ordering" BIGINT AUTO_INCREMENT,
@@ -132,9 +154,6 @@ object OneFileIngestLifecycleTestCLI {
                 CREATE UNIQUE INDEX "journal_ordering_idx" ON PUBLIC."journal"("ordering");
               """,
         sqlu"""
-                DROP TABLE IF EXISTS PUBLIC."snapshot";
-              """,
-        sqlu"""
                 CREATE TABLE IF NOT EXISTS PUBLIC."snapshot" (
                 "persistence_id" VARCHAR(255) NOT NULL,
                 "sequence_number" BIGINT NOT NULL,
@@ -142,12 +161,9 @@ object OneFileIngestLifecycleTestCLI {
                 "snapshot" BYTEA NOT NULL,
                 PRIMARY KEY("persistence_id", "sequence_number")
               );
-              """
-      )
+              """)
 
-      DBIO.sequence(ddls)
-    }
-    val db_fut = db.run(inserts)
+    val db_fut = db.run(DBIO.sequence(drops ++ inserts))
     Await.ready(db_fut, 5 seconds)
 
     h2_server
