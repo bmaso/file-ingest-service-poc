@@ -17,78 +17,48 @@ import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
-
 /**
- * This is a standalone application, intended to be a member of a multi-node cluster performing
- * file ingestion.
- *
- * CLI args:
- * * `h2-database` - If any arg has the value "h2-database", then this node will start an H2 TCP database server
- *   locally. When you are running multiple nodes locally then one should start the H2 TCP server and all nodes
- *   should be configured with a JDBC URL referencing "localhost".
- * * `do-lifecycle <cyclId> <dataFileLocation>` - Three arguments beginning with `do-lifecycle` causes the node
- *   to issue a series of file ingestion commands targeting a single file ingestion identified by `(cycleId, dataFileLocation)`.
- *   Note that without this series of arguments then the node starts and never dies.
+ * Intended to be run as a single node, performing a complete file upload one the node has started. Inits both the
+ * `FileIngestEntity` and `FileIngestionEventProcessorStream` types. Tests that events are being properly tagged,
+ * and event processor stream receives events, and interactions b/w entities and processor streams works as intended
+ * in the happy path.
  */
-object OneFileIngestLifecycleTestCLI {
+object EntityAndEventProcessorIntegrationTestCLI {
   /** Single-thread executor used for one-off futures side-effects and mapping/processing */
   implicit val oneOffEC = ExecutionContexts.fromExecutor(Executors.newSingleThreadExecutor())
 
   def main(args: Array[String]): Unit = {
+    val cycleId = args(0)
+    val dataFile = args(1)
+
+    if(cycleId == null || cycleId.length == 0) throw new IllegalArgumentException("First CLI arg must be the cycle ID")
+    if(dataFile == null || dataFile.length == 0) throw new IllegalArgumentException("Second CLI arg must be the data file")
+
     val system = ActorSystem(ActorSystemRootActor(), "FileIngestion")
 
-    //...this this node is hosting the H2 TCP server, create it and capture reference so we can register it
+    //...this node is always self-hosts its H2 TCP server; create it and capture reference so we can register it
     //   for shutdown when node comes down...
-    val h2_server_? : Option[Server] =
-      if(args.length >= 1 && args.contains("h2-database")) {
-        Some(startDatabaseServerSync(system, args.contains("drop-tables")))
-      } else None
+    val h2_server = startDatabaseServerSync(system, true)
 
     //...start this node...
     startNode(system) {
-      //...if command-line includes directions to do so, start file ingest of a single file...
-      if(args.length >= 3 && args.contains("do-lifecycle")) {
-        val argidx = args.indexOf("do-lifecycle")
-        val cycleId = args(argidx + 1)
-        val dataFile = args(argidx + 2)
+      val fileIngestOrder = FileIngestion.IngestFileOrder(cycleId, "someUser", "someHosts", dataFile,
+        FileIngestion.IngestFileOrder.DBInfo("targetDatabase", "targetSchema", "targetTable"),
+        FileIngestion.IngestFileOrder.FileInfo("~", List(
+          FileIngestion.IngestFileOrder.ColumnInfo("col1", "type1"),
+          FileIngestion.IngestFileOrder.ColumnInfo("col2", "type2"),
+          FileIngestion.IngestFileOrder.ColumnInfo("col3", "type3")
+        )))
+      val cleanseCompleteAckOrder = FileIngestion.CleanseCompleteAcknowledgementOrder(dataFile + "/cleansed")
+      val uploadCompleteAckOrder = FileIngestion.UploadCompleteAcknowledgementOrder()
 
-        val fileIngestOrder = FileIngestion.IngestFileOrder(cycleId, "someUser", "someHosts", dataFile,
-          FileIngestion.IngestFileOrder.DBInfo("targetDatabase", "targetSchema", "targetTable"),
-          FileIngestion.IngestFileOrder.FileInfo("~", List(
-            FileIngestion.IngestFileOrder.ColumnInfo("col1", "type1"),
-            FileIngestion.IngestFileOrder.ColumnInfo("col2", "type2"),
-            FileIngestion.IngestFileOrder.ColumnInfo("col3", "type3")
-          )))
-        val cleanseCompleteAckOrder = FileIngestion.CleanseCompleteAcknowledgementOrder(dataFile + "/cleansed")
-        val uploadCompleteAckOrder = FileIngestion.UploadCompleteAcknowledgementOrder()
+      val entityRef =
+        ClusterSharding(system).entityRefFor[FileIngestion.Order](FileIngestionEntity.EntityKey, FileIngestionEntity.entityIdFor(cycleId, dataFile))
 
-        val entityRef =
-          ClusterSharding(system).entityRefFor[FileIngestion.Order](FileIngestionEntity.EntityKey, FileIngestionEntity.entityIdFor(cycleId, dataFile))
-
-        entityRef ! fileIngestOrder
-
-        //...artificially wait a second to allow ingest process to start, the print out state...
-        Thread.sleep(1000)
-        retrieveAndPrintState(entityRef)
-
-        entityRef ! cleanseCompleteAckOrder
-
-        //...artificially wait a second to allow ingest process to start, the print out state...
-        Thread.sleep(1000)
-        retrieveAndPrintState(entityRef)
-
-        entityRef ! uploadCompleteAckOrder
-
-        //...artificially wait a second to allow ingest process to start, the print out state...
-        Thread.sleep(1000)
-        retrieveAndPrintState(entityRef)
-      }
-
-      //...if this node is the host of the H2 TCP server then register it for shutdown when the actor system shuts down...
-      h2_server_?.foreach { server =>
-        system.whenTerminated.onComplete(_ => server.shutdown())
-      }
+      entityRef ! fileIngestOrder
     }
+
+    system.whenTerminated.onComplete(_ => h2_server.shutdown())
 
     println("Node Up! Press [ENTER] to quit")
     Console.in.readLine()
@@ -101,14 +71,6 @@ object OneFileIngestLifecycleTestCLI {
     }
 
     system.terminate
-  }
-
-  def retrieveAndPrintState(entityRef: EntityRef[FileIngestion.Order]): Unit = {
-    val status_fut =
-      entityRef.ask[FileIngestion.CurrentState](ref => FileIngestion.FileIngestStateRetrieveOrder(ref))(5 seconds)
-
-    val state = Await.result(status_fut, 120 seconds)
-    println(s"Status report order response: $state")
   }
 
   /**
@@ -127,20 +89,23 @@ object OneFileIngestLifecycleTestCLI {
 
     val drops =
       if(dropTables)  {
-          List(
-            sqlu"""
-                  DROP TABLE IF EXISTS PUBLIC."journal";
+        List(
+          sqlu"""
+                  DROP TABLE IF EXISTS "journal";
                 """,
-            sqlu"""
-                  DROP TABLE IF EXISTS PUBLIC."snapshot";
+          sqlu"""
+                  DROP TABLE IF EXISTS "snapshot";
                 """,
-          )
-        } else List.empty[DBIO[Int]]
+          sqlu"""
+                  DROP TABLE IF EXISTS "processor_offsets";
+                """,
+        )
+      } else List.empty[DBIO[Int]]
 
     val inserts =
       List(
         sqlu"""
-                CREATE TABLE IF NOT EXISTS PUBLIC."journal" (
+                CREATE TABLE IF NOT EXISTS "journal" (
                 "ordering" BIGINT AUTO_INCREMENT,
                 "persistence_id" VARCHAR(255) NOT NULL,
                 "sequence_number" BIGINT NOT NULL,
@@ -151,20 +116,30 @@ object OneFileIngestLifecycleTestCLI {
               );
               """,
         sqlu"""
-                CREATE UNIQUE INDEX "journal_ordering_idx" ON PUBLIC."journal"("ordering");
+                CREATE UNIQUE INDEX "journal_ordering_idx" ON "journal"("ordering");
               """,
         sqlu"""
-                CREATE TABLE IF NOT EXISTS PUBLIC."snapshot" (
+                CREATE TABLE IF NOT EXISTS "snapshot" (
                 "persistence_id" VARCHAR(255) NOT NULL,
                 "sequence_number" BIGINT NOT NULL,
                 "created" BIGINT NOT NULL,
                 "snapshot" BYTEA NOT NULL,
                 PRIMARY KEY("persistence_id", "sequence_number")
               );
-              """)
+              """,
+        sqlu"""
+                CREATE TABLE IF NOT EXISTS "processor_offsets" (
+                "processor_id" VARCHAR(255) NOT NULL,
+                "tag" VARCHAR(255) NOT NULL,
+                "offset_val" BIGINT NOT NULL,
+                PRIMARY KEY("processor_id", "tag")
+              );
+              """,
+      )
 
     val db_fut = db.run(DBIO.sequence(drops ++ inserts))
-    Await.ready(db_fut, 5 seconds)
+    val result = Await.result(db_fut, 5 seconds)
+    println(s"Database creation result: $result")
 
     h2_server
   }
@@ -181,8 +156,6 @@ object OneFileIngestLifecycleTestCLI {
     })(oneOffEC)
 
     Await.ready(startup_fut, 5 seconds)
-
-    println("Node started")
   }
 
   object ActorSystemRootActor {
@@ -197,11 +170,10 @@ object OneFileIngestLifecycleTestCLI {
         //...register the FileIngestionEntity type in the cluster so that this entity type is addressable...
         FileIngestionEntity.init(system, settings)
 
-        // TODO: start sharded read-model actors to handle entity event streams...
-        //EventProcessor.init(
-        //  system,
-        //  settings,
-        //  tag => new FileIngestionEventProcessorStream(system, system.executionContext, settings.id, tag))
+        EventProcessor.init(
+          system,
+          settings,
+          tag => new FileIngestionEventProcessorStream(system, system.executionContext, settings.id, tag))
 
         Behaviors.receiveMessage {
           case StartUp(replyTo) =>

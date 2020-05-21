@@ -7,8 +7,9 @@
 
 
     <logger name="com.codahale.metrics" level="INFO"  />
-    <logger name="slick" level="INFO" />
+    <logger name="slick" level="WARN" />
     <logger name="akka.serialization" level="ERROR" />
+    <logger name="bmaso" level="WARN" />"
 
     <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
         <queueSize>8192</queueSize>
@@ -16,7 +17,7 @@
         <appender-ref ref="STDOUT" />
     </appender>
 
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="ASYNC"/>
     </root>
 

@@ -56,24 +56,28 @@ object FileIngestionEntity {
     def empty: InternalState = InternalState(None, None, None, None)
   }
 
-  sealed trait Event
-  case class FileIngestionEnqueuedEvent(originalOrder: FileIngestion.IngestFileOrder, timestamp: Instant)
+  sealed trait Event {
+    def entityId: String
+  }
+  case class FileIngestionEnqueuedEvent(originalOrder: FileIngestion.IngestFileOrder, override val entityId: String, timestamp: Instant)
     extends Event
-  case class FileCleanseCompleteEvent(cleanseCompleteOrder: FileIngestion.CleanseCompleteAcknowledgementOrder, timestamp: Instant)
+  case class FileCleanseCompleteEvent(cleanseCompleteOrder: FileIngestion.CleanseCompleteAcknowledgementOrder,
+                                      override val entityId: String, timestamp: Instant)
     extends Event
-  case class FileCleanseProblemsEvent(problems: NonEmptyList[String], timestamp: Instant)
+  case class FileCleanseProblemsEvent(problems: NonEmptyList[String], override val entityId: String, timestamp: Instant)
     extends Event
-  case class FileUploadCompleteEvent(uploadCompleteOrder: FileIngestion.UploadCompleteAcknowledgementOrder, timestamp: Instant)
+  case class FileUploadCompleteEvent(uploadCompleteOrder: FileIngestion.UploadCompleteAcknowledgementOrder,
+                                     override val entityId: String, timestamp: Instant)
     extends Event
-  case class FileUploadProblemsEvent(problems: NonEmptyList[String], timestamp: Instant)
+  case class FileUploadProblemsEvent(problems: NonEmptyList[String], override val entityId: String, timestamp: Instant)
     extends Event
 
   def handleEvent(state: InternalState, event: Event)  = event match {
-    case FileIngestionEnqueuedEvent(order, timestamp) => state.enqueued(order)
-    case FileCleanseCompleteEvent(cleanseCompleteOrder, timestamp) => state.cleanseComplete(cleanseCompleteOrder)
-    case FileUploadCompleteEvent(uploadCompleteOrder, timestamp) => state.uploadComplete(uploadCompleteOrder)
-    case FileCleanseProblemsEvent(problems, timestamp) => state.withProblems(problems)
-    case FileUploadProblemsEvent(problems, timestamp) => state.withProblems(problems)
+    case FileIngestionEnqueuedEvent(order, _, timestamp) => state.enqueued(order)
+    case FileCleanseCompleteEvent(cleanseCompleteOrder, _, timestamp) => state.cleanseComplete(cleanseCompleteOrder)
+    case FileUploadCompleteEvent(uploadCompleteOrder, _, timestamp) => state.uploadComplete(uploadCompleteOrder)
+    case FileCleanseProblemsEvent(problems, _, timestamp) => state.withProblems(problems)
+    case FileUploadProblemsEvent(problems, _, timestamp) => state.withProblems(problems)
   }
 
   def handleCommand(state: InternalState, command: FileIngestion.Order): ReplyEffect[Event, InternalState] = {
@@ -83,34 +87,34 @@ object FileIngestionEntity {
       case order @ FileIngestion.IngestFileOrder(cycleId, userId, host, dataFile, dbInfo, fileInfo) =>
         if(state.isBegun) Effect.noReply //...this is a duplicate request for a given (cycleId, dataFile) pair: ignore...
         else
-        Effect.persist(FileIngestionEnqueuedEvent(order, Instant.now()))
+        Effect.persist(FileIngestionEnqueuedEvent(order, entityIdFor(cycleId, dataFile), Instant.now()))
           .thenNoReply()
 
       case order @ FileIngestion.IngestFileOrderWithNotification(originalOrder, replyTo) =>
         if(state.isBegun) Effect.reply(replyTo)(FileIngestion.IngestFileOrderRejected(originalOrder.cycleId, originalOrder.dataFile,
           NonEmptyList(s"File upload for file ${originalOrder.dataFile} within cycle ${originalOrder.cycleId} has already been launched", Nil)))
         else
-          Effect.persist(FileIngestionEnqueuedEvent(originalOrder, Instant.now()))
+          Effect.persist(FileIngestionEnqueuedEvent(originalOrder, entityIdFor(originalOrder.cycleId, originalOrder.dataFile), Instant.now()))
             .thenReply(replyTo)(state => FileIngestion.IngestFileOrderAcknowledgement(originalOrder.cycleId, originalOrder.dataFile,
               originalOrder))
 
       case order @ FileIngestion.CleanseCompleteAcknowledgementOrder(cleasedDataFile) =>
-        Effect.persist(FileCleanseCompleteEvent(order, Instant.now()))
+        Effect.persist(FileCleanseCompleteEvent(order, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
           .thenNoReply
 
       case order @ FileIngestion.UploadCompleteAcknowledgementOrder() =>
-        Effect.persist(FileUploadCompleteEvent(order, Instant.now()))
+        Effect.persist(FileUploadCompleteEvent(order, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
           .thenNoReply
 
       case FileIngestion.ProblemsAcknowledgementOrder(problems) =>
         //...if cleanse is not complete, then this is a problem with asynchronous cleasning process...
         if(!state.cleanseComplete_?.isDefined)
-          Effect.persist(FileCleanseProblemsEvent(problems, Instant.now()))
+          Effect.persist(FileCleanseProblemsEvent(problems, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
             .thenNoReply
 
         //...if cleanse *is* complete, then this is a problem with asynchronous uploading process...
         else
-        Effect.persist(FileUploadProblemsEvent(problems, Instant.now()))
+        Effect.persist(FileUploadProblemsEvent(problems, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
           .thenNoReply
 
       case FileIngestion.FileIngestStateRetrieveOrder(replyTo) =>
@@ -133,7 +137,7 @@ object FileIngestionEntity {
   def apply(fileIngestionId: String, eventProcessorTags: Set[String]): Behavior[FileIngestion.Order] = {
     EventSourcedBehavior
       .withEnforcedReplies[FileIngestion.Order, Event, InternalState](
-        PersistenceId(EntityKey.name, fileIngestionId),
+        PersistenceId(EntityKey.name, fileIngestionId, "."),
         InternalState.empty,
         (state, command) => handleCommand(state, command),
         (state, event) => handleEvent(state, event))

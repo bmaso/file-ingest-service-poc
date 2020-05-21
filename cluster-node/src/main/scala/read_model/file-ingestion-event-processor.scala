@@ -52,12 +52,12 @@ class FileIngestionEventProcessorStream(system: ActorSystem[_],
   }
 
   def processEvent(event: FileIngestionEntity.Event, persistenceId: PersistenceId, sequenceNr: Long): Future[Done] = {
-    lazy val entityRef = ClusterSharding(system).entityRefFor(FileIngestionEntity.EntityKey, persistenceId.id)
+    lazy val entityRef = ClusterSharding(system).entityRefFor(FileIngestionEntity.EntityKey, event.entityId)
 
     log.debug(s"FileIngestionEventProcessor($tag) consumed $event from $persistenceId with seqNr $sequenceNr")
 
     event match {
-      case FileIngestionEntity.FileIngestionEnqueuedEvent(originalOrder, timestamp) =>
+      case FileIngestionEntity.FileIngestionEnqueuedEvent(originalOrder, _, timestamp) =>
         val cleanse_fut = cleanseFileAsync(originalOrder.dataFile)
         cleanse_fut.onComplete ({
           case Success(cleansedFile) =>
@@ -69,7 +69,7 @@ class FileIngestionEventProcessorStream(system: ActorSystem[_],
             entityRef ! FileIngestion_protocol.ProblemsAcknowledgementOrder(NonEmptyList(exception.getMessage, List.empty))
         })
 
-      case FileIngestionEntity.FileCleanseCompleteEvent(cleanseCompleteOrder, timestamp) =>
+      case FileIngestionEntity.FileCleanseCompleteEvent(cleanseCompleteOrder, _,timestamp) =>
         val upload_fut = uploadFileAsync(cleanseCompleteOrder.cleansedDataFile)
         upload_fut.onComplete ({
           case Success(_) =>
