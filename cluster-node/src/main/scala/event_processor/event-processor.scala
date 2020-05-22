@@ -100,12 +100,12 @@ abstract class EventProcessorStream[Event: ClassTag](
     val initial_insert_fut = db.run(initialInsertOffsetStatement)
     try {
       val result = Await.result(initial_insert_fut, 10 seconds)
-      println(s"Result from inserting initial offset -- its OK if this fails: $result")
+      log.debug(s"Result from inserting initial offset -- its OK if this fails: $result")
     } catch {
       case ex: SQLException =>
-        log.info(s"Ignoring SQL exception $ex indicating that event processor $eventProcessorId already has an offset for tag $tag")
+        log.debug(s"Ignoring SQL exception $ex indicating that event processor $eventProcessorId already has an offset for tag $tag")
       case ex: Throwable =>
-        log.info(s"Ignoring?? general exception $ex, possibly indicating that event processor $eventProcessorId already has an offset for tag $tag")
+        log.warn(s"Ignoring?? general exception $ex, possibly indicating that event processor $eventProcessorId already has an offset for tag $tag")
     }
 
     RestartSource

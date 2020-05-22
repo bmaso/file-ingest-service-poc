@@ -1,0 +1,33 @@
+{
+  "cycleId": "123",
+  "userId": "serviceAccount",
+  "host": "whatismycallit",
+  "dataFile": "/opt/project/daily/blah-2020-040-23.dat",
+  "notifications": "abc.defg@xxx.com,blah.blah@uxx.com",
+  "targetDatabase": "TARGETDB",
+  "targetSchema": "WHATEVER",
+  "targetTable": "MY_TABLE",
+  "delimiter": "~",
+  "columns": [
+    {
+      "columnName": "COLUMN1",
+      "protegrityDataType": "NA"
+    },
+    {
+      "columnName": "COLUMN2",
+      "protegrityDataType": "DeAccountNum"
+    },
+    {
+      "columnName": "COLUMN3",
+      "protegrityDataType": "NA"
+    },
+    {
+      "columnName": "COLUMN4",
+      "protegrityDataType": "DeSSN"
+    },
+    {
+      "columnName": "COLUMN5",
+      "protegrityDataType": "NA"
+    }
+  ]
+}

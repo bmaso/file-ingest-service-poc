@@ -1,7 +1,7 @@
 <configuration>
     <appender name="STDOUT" target="System.out" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>[%date{ISO8601}] [%level] [%logger] [%marker] [%thread] - %msg MDC: {%mdc}%n</pattern>
+            <pattern>[%date{ISO8601}] [%level] [%logger] [%thread] - %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -9,8 +9,10 @@
     <logger name="com.codahale.metrics" level="INFO"  />
     <logger name="slick" level="WARN" />
     <logger name="akka.serialization" level="ERROR" />
-    <logger name="bmaso" level="WARN" />"
-    <logger name="bmaso.file_ingest_service_poc.cluster_node.MainExecutable$" level="INFO" />"
+    <logger name="bmaso.file_ingest_service_poc.cluster_node" level="INFO" />
+
+    <logger name="bmaso.file_ingest_service_poc.cluster_node.ClusterNodeRoutes" level="DEBUG" />
+    <logger name="bmaso.file_ingest_service_poc.cluster_node.MainExecutable$" level="INFO" />
 
     <appender name="ASYNC" class="ch.qos.logback.classic.AsyncAppender">
         <queueSize>8192</queueSize>

@@ -4,11 +4,12 @@ package bmaso.file_ingest_service_poc.cluster_node
 import akka.actor.typed.scaladsl.Behaviors
 import akka.actor.typed.{ActorRef, ActorSystem, Behavior}
 import akka.actor.typed.scaladsl.AskPattern._
-
 import bmaso.akka.event_processor.{EventProcessor, EventProcessorSettings}
 import cats.implicits._
 import com.monovore.decline._
+import com.typesafe.config.{Config, ConfigFactory}
 import org.h2.tools.Server
+import org.slf4j.{Logger, LoggerFactory}
 import slick.jdbc.H2Profile.api._
 
 import scala.concurrent.Await
@@ -52,24 +53,33 @@ object MainExecutable {
   def execute(options: Options) = {
     import options._
 
-    val system = ActorSystem(ActorSystemRootActor(), "FileIngestion")
+    val log: Logger = LoggerFactory.getLogger(this.getClass)
+
+    val system = ActorSystem(ActorSystemRootActor(), "FileIngestion", configWithClusterPort(clusterPort))
 
     //...this this node is hosting the H2 TCP server, create it and capture reference so we can register it
     //   for shutdown when node comes down...
     val h2_server_? : Option[Server] =
     if(dbServerFlag) {
-      Some(startDatabaseServerSync(system, clearDbFlag))
-    } else None
+      val ret = Some(startDatabaseServerSync(system, clearDbFlag))
+      log.info("H2 Database Server started within this VM")
+      ret
+    } else {
+      log.info("-- relying on an H2 server hosted by a separate process")
+      None
+    }
 
     //...start this node...
     startNode(system) {
-      println("Node has been initialized and is now running in the cluster")
+      log.info(s"Node has been initialized and is now running in the cluster on port $clusterPort")
     }
 
-    system.whenTerminated.onComplete(_ => h2_server_?.foreach(_.shutdown()))(system.executionContext)
+    //...start the web server; note the server constructs a coordinated shutdown with the actor system...
+    new FileIngestionServer(new ClusterNodeRoutes()(system).fileIngestRoutes, httpPort, system).start()
+    log.info(s"Web server up and running on port $httpPort")
 
-    println("Node Up! Press [ENTER] to quit")
-    Console.in.readLine()
+    //...set up shutdown functions for the H2 database and to bring the VM down when the actor system terminates...
+    system.whenTerminated.onComplete(_ => h2_server_?.foreach(_.shutdown()))(system.executionContext)
 
     system.whenTerminated.onComplete ({
       case Success(_) => System.exit(0)
@@ -78,8 +88,19 @@ object MainExecutable {
         System.exit(-1)
     })(system.executionContext)
 
+    //...invite the user to shut this server down...
+    println("Node Up! Press [ENTER] to quit")
+    Console.in.readLine()
+
+    log.info("Shutting down")
     system.terminate
   }
+
+  def configWithClusterPort(clusterPort: Int): Config =
+    ConfigFactory.parseString(s"""
+      akka.remote.artery.canonical.port = $clusterPort
+       """).withFallback(ConfigFactory.load())
+
 
   /**
    * Synchronously start a local H2 TCP database server. Should only be invoked by a single node in the cluster. All
@@ -147,7 +168,6 @@ object MainExecutable {
 
     val db_fut = db.run(DBIO.sequence(drops ++ inserts))
     val result = Await.result(db_fut, 5 seconds)
-    println(s"Database creation result: $result")
 
     h2_server
   }

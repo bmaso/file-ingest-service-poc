@@ -80,14 +80,23 @@ project(':cluster-node') {
         // Command-line options parsing
         compile group: 'com.monovore', name: "decline_${scalaVersionMajor}", version: monovoreDeclineVersion
 
-        // Logging in test CLIs and unit tests is done through logback
-        testCompile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
+        // Logging using logback
+        compile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
     }
 
     jar {
         manifest {
             attributes 'Main-Class': 'bmaso.file_ingest_service_poc.cluster_node.MainCLI'
         }
+    }
+
+    task runSeedNodeAsDBHost(type: JavaExec) {
+        classpath = sourceSets.main.runtimeClasspath
+
+        main = 'bmaso.file_ingest_service_poc.cluster_node.MainCLI'
+
+        // arguments to pass to the application
+        args(['--http-port=8051', '--cluster-port=2551', '--host-h2-database-server', '--clear-h2-database'])
     }
 }
 

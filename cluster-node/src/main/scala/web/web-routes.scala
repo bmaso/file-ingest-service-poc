@@ -2,15 +2,17 @@ package bmaso.file_ingest_service_poc.cluster_node
 
 import scala.concurrent.Future
 import cats.data.NonEmptyList
-import spray.json.DefaultJsonProtocol
-
+import spray.json._
 import akka.actor.typed.{ActorRef, ActorSystem}
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Route
-import akka.util.Timeout
-
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.{ContentType, HttpEntity, HttpResponse, StatusCodes}
+import akka.http.scaladsl.model.ContentTypes._
+import akka.http.scaladsl.model.headers.`Content-Type`
+import akka.http.scaladsl.server.{Directives, Route}
+import akka.util.{ByteString, Timeout}
 import bmaso.file_ingest_service_poc.protocol.FileIngestion
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
  * Spray JSON declarations of how to (un)marshal message types
@@ -61,12 +63,14 @@ object ClusterNodeRoutes {
       targetTable: String,
       delimiter: String,
       columns: List[IngestFileColumn])
-  case class IngestFileColumn(columnsName: String, protegrityDataType: String)
+  case class IngestFileColumn(columnName: String, protegrityDataType: String)
 
   case class ProblemList(problems: List[String])
 }
 
 class ClusterNodeRoutes()(implicit system: ActorSystem[_]) {
+  val log: Logger = LoggerFactory.getLogger(getClass)
+
   implicit private val timeout: Timeout =
     Timeout.create(system.settings.config.getDuration("file-ingest.http.internalResponseTimeout"))
   private val sharding = ClusterSharding(system)
@@ -80,7 +84,7 @@ class ClusterNodeRoutes()(implicit system: ActorSystem[_]) {
     val o = FileIngestion.IngestFileOrder(data.cycleId, data.userId, data.host,
       FileIngestion.IngestFileOrder.DBInfo(data.targetDatabase, data.targetSchema, data.targetTable),
       FileIngestion.IngestFileOrder.FileInfo(data.dataFile, data.delimiter,
-        data.columns.map(col => FileIngestion.IngestFileOrder.ColumnInfo(col.columnsName, col.protegrityDataType))))
+        data.columns.map(col => FileIngestion.IngestFileOrder.ColumnInfo(col.columnName, col.protegrityDataType))))
 
     FileIngestion.IngestFileOrderWithNotification(o, replyTo)
   }
@@ -94,6 +98,8 @@ class ClusterNodeRoutes()(implicit system: ActorSystem[_]) {
           entity(as[IngestFile]) { data =>
 
             // TODO: should do some validation here...
+
+            log.info(s"Handling POST request with payload: $data")
 
             val entityRef = sharding.entityRefFor(FileIngestionEntity.EntityKey,
               FileIngestionEntity.entityIdFor(data.cycleId, data.dataFile))
@@ -112,7 +118,12 @@ class ClusterNodeRoutes()(implicit system: ActorSystem[_]) {
           }
         },
         pathPrefix(Segment) { cycleId =>
+          log.debug(s"Parsed path segment for cycleId '$cycleId'")
+
           pathPrefix(Segment) { dataFile =>
+            log.debug(s"Parsed path segment for dataFile '$dataFile'")
+            log.debug(s"\tentityId for this ingest is '${FileIngestionEntity.entityIdFor(cycleId, dataFile)}'")
+
             get {
               val entityRef = sharding.entityRefFor(FileIngestionEntity.EntityKey,
                 FileIngestionEntity.entityIdFor(cycleId, dataFile))
@@ -120,14 +131,16 @@ class ClusterNodeRoutes()(implicit system: ActorSystem[_]) {
               val reply = entityRef.ask[FileIngestion.CurrentState](FileIngestion.FileIngestStateRetrieveOrder(_))
 
               onSuccess(reply) {
+                case FileIngestion.CurrentState(FileIngestion.EmptyState) =>
+                  complete(HttpResponse(status = StatusCodes.OK, entity = HttpEntity(`application/json`, ByteString("""{"status": "outside the horizon of knowledge"}"""))))
                 case FileIngestion.CurrentState(_: FileIngestion.Enqueued) =>
-                  complete(StatusCodes.OK -> "enqueued")
+                  complete(HttpResponse(status = StatusCodes.OK, entity = HttpEntity(`application/json`, ByteString("""{"status": "enqueued"}"""))))
                 case FileIngestion.CurrentState(_: FileIngestion.Cleansing) =>
-                  complete(StatusCodes.OK -> "cleansing")
+                  complete(HttpResponse(status = StatusCodes.OK, entity = HttpEntity(`application/json`, ByteString("""{"status": "cleansing"}"""))))
                 case FileIngestion.CurrentState(_: FileIngestion.Uploading) =>
-                  complete(StatusCodes.OK -> "uploading")
+                  complete(HttpResponse(status = StatusCodes.OK, entity = HttpEntity(`application/json`, ByteString("""{"status": "uploading"}"""))))
                 case FileIngestion.CurrentState(_: FileIngestion.Complete) =>
-                  complete(StatusCodes.OK -> "complete")
+                  complete(HttpResponse(status = StatusCodes.OK, entity = HttpEntity(`application/json`, ByteString("""{"status": "complete"}"""))))
               }
             }
           }

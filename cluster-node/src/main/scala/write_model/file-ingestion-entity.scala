@@ -8,14 +8,16 @@ import akka.actor.typed.{ActorSystem, Behavior, SupervisorStrategy}
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior, ReplyEffect, RetentionCriteria}
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import akka.persistence.typed.PersistenceId
-
 import bmaso.file_ingest_service_poc.protocol._
 import bmaso.akka.event_processor.EventProcessorSettings
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
  * This model defines the persistent
  */
 object FileIngestionEntity {
+  val log: Logger = LoggerFactory.getLogger(getClass)
+
   /** The current state of the entity lifecycle is represented at any time by an instance of this class */
   final case class InternalState(originalOrder_? : Option[FileIngestion.IngestFileOrder],
                                  cleanseComplete_? : Option[FileIngestion.CleanseCompleteAcknowledgementOrder],
@@ -82,7 +84,7 @@ object FileIngestionEntity {
   }
 
   def handleCommand(state: InternalState, command: FileIngestion.Order): ReplyEffect[Event, InternalState] = {
-    println(s"Handling command $command in state $state")
+    log.info(s"Handling command $command in state $state")
 
     command match {
       case order @ FileIngestion.IngestFileOrder(cycleId, userId, host, dbInfo, fileInfo) =>
@@ -138,7 +140,7 @@ object FileIngestionEntity {
   def apply(fileIngestionId: String, eventProcessorTags: Set[String]): Behavior[FileIngestion.Order] = {
     EventSourcedBehavior
       .withEnforcedReplies[FileIngestion.Order, Event, InternalState](
-        PersistenceId(EntityKey.name, fileIngestionId, "."),
+        PersistenceId(EntityKey.name, fileIngestionId),
         InternalState.empty,
         (state, command) => handleCommand(state, command),
         (state, event) => handleEvent(state, event))
