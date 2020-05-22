@@ -21,8 +21,9 @@ import bmaso.file_ingest_service_poc.protocol.{FileIngestion => FileIngestion_pr
 class FileIngestionEventProcessorStream(system: ActorSystem[_],
                                         executionContext: ExecutionContext,
                                         eventProcessorId: String,
+                                        parallelism: Int,
                                         tag: String)
-  extends EventProcessorStream[FileIngestionEntity.Event](system, executionContext, eventProcessorId, tag) {
+  extends EventProcessorStream[FileIngestionEntity.Event](system, executionContext, eventProcessorId, parallelism, tag) {
 
   /**
    * For now we mock file cleansing using a future that always completes successfully in 15 seconds. The future value

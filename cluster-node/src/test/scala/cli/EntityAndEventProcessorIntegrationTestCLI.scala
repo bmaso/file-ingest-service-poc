@@ -173,7 +173,7 @@ object EntityAndEventProcessorIntegrationTestCLI {
         EventProcessor.init(
           system,
           settings,
-          tag => new FileIngestionEventProcessorStream(system, system.executionContext, settings.id, tag))
+          tag => new FileIngestionEventProcessorStream(system, system.executionContext, settings.id, settings.parallelism, tag))
 
         Behaviors.receiveMessage {
           case StartUp(replyTo) =>

@@ -73,11 +73,20 @@ object EventProcessor {
  * A special database table maintains the current offset of each sharded event processor in the
  * event stream. Thus when the event processor is re-started after migration to new node or passivate/activation
  * cycle, it can pick up processing events where it left off.
+ *
+ * @param parallelism Indicate the max number of events to process in parallel. Setting this number above 1
+ *                    is potentially problematic because it *may* lead to simultaneous actions on the same entity. You
+ *                    must review the underlying entity's state processing model to ensure that simultaneous processing
+ *                    of multiple events from the same entity won't cause any problems. Typically this is fine for most
+ *                    state models because either A) the event model is strictly sequential -- the entity never emits more
+ *                    than one event, and waits for the event to be handled before emitting any more; OR B) simultaneous
+ *                    event processing already takes simultaneous event processing into account.
  */
 abstract class EventProcessorStream[Event: ClassTag](
                                                       system: ActorSystem[_],
                                                       executionContext: ExecutionContext,
                                                       eventProcessorId: String,
+                                                      parallelism: Int,
                                                       tag: String) {
 
   val log: Logger = LoggerFactory.getLogger(getClass)
@@ -125,7 +134,7 @@ abstract class EventProcessorStream[Event: ClassTag](
   }
 
   private def processEventsByTag(offset: Offset): Source[Offset, NotUsed] = {
-    query.eventsByTag(tag, offset).mapAsync(1) { eventEnvelope =>
+    query.eventsByTag(tag, offset).mapAsync(parallelism) { eventEnvelope =>
       eventEnvelope.event match {
         case event: Event =>
           processEvent(event, PersistenceId.ofUniqueId(eventEnvelope.persistenceId), eventEnvelope.sequenceNr).map(_ =>
