@@ -42,9 +42,9 @@ object EntityAndEventProcessorIntegrationTestCLI {
 
     //...start this node...
     startNode(system) {
-      val fileIngestOrder = FileIngestion.IngestFileOrder(cycleId, "someUser", "someHosts", dataFile,
+      val fileIngestOrder = FileIngestion.IngestFileOrder(cycleId, "someUser", "someHosts",
         FileIngestion.IngestFileOrder.DBInfo("targetDatabase", "targetSchema", "targetTable"),
-        FileIngestion.IngestFileOrder.FileInfo("~", List(
+        FileIngestion.IngestFileOrder.FileInfo(dataFile, "~", List(
           FileIngestion.IngestFileOrder.ColumnInfo("col1", "type1"),
           FileIngestion.IngestFileOrder.ColumnInfo("col2", "type2"),
           FileIngestion.IngestFileOrder.ColumnInfo("col3", "type3")

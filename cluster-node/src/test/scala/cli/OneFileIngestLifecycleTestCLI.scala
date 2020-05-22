@@ -52,9 +52,9 @@ object OneFileIngestLifecycleTestCLI {
         val cycleId = args(argidx + 1)
         val dataFile = args(argidx + 2)
 
-        val fileIngestOrder = FileIngestion.IngestFileOrder(cycleId, "someUser", "someHosts", dataFile,
+        val fileIngestOrder = FileIngestion.IngestFileOrder(cycleId, "someUser", "someHosts",
           FileIngestion.IngestFileOrder.DBInfo("targetDatabase", "targetSchema", "targetTable"),
-          FileIngestion.IngestFileOrder.FileInfo("~", List(
+          FileIngestion.IngestFileOrder.FileInfo(dataFile, "~", List(
             FileIngestion.IngestFileOrder.ColumnInfo("col1", "type1"),
             FileIngestion.IngestFileOrder.ColumnInfo("col2", "type2"),
             FileIngestion.IngestFileOrder.ColumnInfo("col3", "type3")
@@ -178,7 +178,7 @@ object OneFileIngestLifecycleTestCLI {
       case Failure(exception) =>
         exception.printStackTrace
         system.terminate
-    })(oneOffEC)
+    })(system.executionContext)
 
     Await.ready(startup_fut, 5 seconds)
 

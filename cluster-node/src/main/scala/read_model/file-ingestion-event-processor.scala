@@ -1,16 +1,23 @@
 package bmaso.file_ingest_service_poc.cluster_node
 
+import scala.util.{Failure, Success}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import cats.data.NonEmptyList
+
 import akka.Done
 import akka.actor.typed.ActorSystem
 import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.persistence.typed.PersistenceId
+
 import bmaso.akka.event_processor.EventProcessorStream
 import bmaso.file_ingest_service_poc.protocol.{FileIngestion => FileIngestion_protocol}
-import cats.data.NonEmptyList
 
-import scala.util.{Failure, Success}
-import scala.concurrent.{ExecutionContext, Future, Promise}
-
+/**
+ * An object able to process any event emitted by a FileIngestionEntity during its lifecycle. Participates in the
+ * entity lifecycle by performing long-duration tasks, such as file cleansing and file uploading, at appropriate times
+ * during entity lifecycle. When tasks are completed (or end in error) an acknowledgement command is sent to the
+ * entity so that it may update its internal state.
+ */
 class FileIngestionEventProcessorStream(system: ActorSystem[_],
                                         executionContext: ExecutionContext,
                                         eventProcessorId: String,
@@ -58,10 +65,10 @@ class FileIngestionEventProcessorStream(system: ActorSystem[_],
 
     event match {
       case FileIngestionEntity.FileIngestionEnqueuedEvent(originalOrder, _, timestamp) =>
-        val cleanse_fut = cleanseFileAsync(originalOrder.dataFile)
+        val cleanse_fut = cleanseFileAsync(originalOrder.fileInfo.dataFile)
         cleanse_fut.onComplete ({
           case Success(cleansedFile) =>
-            log.info(s"Completed cleansing of file ${originalOrder.dataFile} => ${cleansedFile}")
+            log.info(s"Completed cleansing of file ${originalOrder.fileInfo.dataFile} => ${cleansedFile}")
             entityRef ! FileIngestion_protocol.CleanseCompleteAcknowledgementOrder(cleansedFile)
 
           case Failure(exception) =>

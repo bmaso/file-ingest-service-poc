@@ -1,15 +1,16 @@
 package bmaso.file_ingest_service_poc.cluster_node
 
+import scala.concurrent.duration._
 import cats.data.NonEmptyList
-import bmaso.file_ingest_service_poc.protocol._
 import java.time.Instant
 
 import akka.actor.typed.{ActorSystem, Behavior, SupervisorStrategy}
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior, ReplyEffect, RetentionCriteria}
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import akka.persistence.typed.PersistenceId
+
+import bmaso.file_ingest_service_poc.protocol._
 import bmaso.akka.event_processor.EventProcessorSettings
-import scala.concurrent.duration._
 
 /**
  * This model defines the persistent
@@ -46,10 +47,10 @@ object FileIngestionEntity {
     def uploadComplete_! = uploadComplete_?.get
 
     def toFileIngestionProtocolState: FileIngestion.State =
-      if(isCompletedSuccessfully) FileIngestion.Complete(originalOrder_!.cycleId, originalOrder_!.dataFile, Instant.EPOCH, None)
-      else if(isCompletedInFailure) FileIngestion.Complete(originalOrder_!.cycleId, originalOrder_!.dataFile, Instant.EPOCH, problems_?)
-      else if(isCleansed) FileIngestion.Uploading(originalOrder_!.cycleId, originalOrder_!.dataFile, Instant.EPOCH)
-      else if(isBegun) FileIngestion.Cleansing(originalOrder_!.cycleId, originalOrder_!.dataFile, Instant.EPOCH)
+      if(isCompletedSuccessfully) FileIngestion.Complete(originalOrder_!.cycleId, originalOrder_!.fileInfo.dataFile, Instant.EPOCH, None)
+      else if(isCompletedInFailure) FileIngestion.Complete(originalOrder_!.cycleId, originalOrder_!.fileInfo.dataFile, Instant.EPOCH, problems_?)
+      else if(isCleansed) FileIngestion.Uploading(originalOrder_!.cycleId, originalOrder_!.fileInfo.dataFile, Instant.EPOCH)
+      else if(isBegun) FileIngestion.Cleansing(originalOrder_!.cycleId, originalOrder_!.fileInfo.dataFile, Instant.EPOCH)
       else FileIngestion.EmptyState
   }
   object InternalState {
@@ -84,37 +85,37 @@ object FileIngestionEntity {
     println(s"Handling command $command in state $state")
 
     command match {
-      case order @ FileIngestion.IngestFileOrder(cycleId, userId, host, dataFile, dbInfo, fileInfo) =>
+      case order @ FileIngestion.IngestFileOrder(cycleId, userId, host, dbInfo, fileInfo) =>
         if(state.isBegun) Effect.noReply //...this is a duplicate request for a given (cycleId, dataFile) pair: ignore...
         else
-        Effect.persist(FileIngestionEnqueuedEvent(order, entityIdFor(cycleId, dataFile), Instant.now()))
-          .thenNoReply()
+        Effect.persist(FileIngestionEnqueuedEvent(order, entityIdFor(cycleId, fileInfo.dataFile), Instant.now()))
+          .thenNoReply
 
       case order @ FileIngestion.IngestFileOrderWithNotification(originalOrder, replyTo) =>
-        if(state.isBegun) Effect.reply(replyTo)(FileIngestion.IngestFileOrderRejected(originalOrder.cycleId, originalOrder.dataFile,
-          NonEmptyList(s"File upload for file ${originalOrder.dataFile} within cycle ${originalOrder.cycleId} has already been launched", Nil)))
+        if(state.isBegun) Effect.reply(replyTo)(FileIngestion.IngestFileOrderRejected(originalOrder.cycleId, originalOrder.fileInfo.dataFile,
+          NonEmptyList(s"File upload for file ${originalOrder.fileInfo.dataFile} within cycle ${originalOrder.cycleId} has already been launched", Nil)))
         else
-          Effect.persist(FileIngestionEnqueuedEvent(originalOrder, entityIdFor(originalOrder.cycleId, originalOrder.dataFile), Instant.now()))
-            .thenReply(replyTo)(state => FileIngestion.IngestFileOrderAcknowledgement(originalOrder.cycleId, originalOrder.dataFile,
+          Effect.persist(FileIngestionEnqueuedEvent(originalOrder, entityIdFor(originalOrder.cycleId, originalOrder.fileInfo.dataFile), Instant.now()))
+            .thenReply(replyTo)(state => FileIngestion.IngestFileOrderAcknowledgement(originalOrder.cycleId, originalOrder.fileInfo.dataFile,
               originalOrder))
 
       case order @ FileIngestion.CleanseCompleteAcknowledgementOrder(cleasedDataFile) =>
-        Effect.persist(FileCleanseCompleteEvent(order, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
+        Effect.persist(FileCleanseCompleteEvent(order, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.fileInfo.dataFile), Instant.now()))
           .thenNoReply
 
       case order @ FileIngestion.UploadCompleteAcknowledgementOrder() =>
-        Effect.persist(FileUploadCompleteEvent(order, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
+        Effect.persist(FileUploadCompleteEvent(order, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.fileInfo.dataFile), Instant.now()))
           .thenNoReply
 
       case FileIngestion.ProblemsAcknowledgementOrder(problems) =>
         //...if cleanse is not complete, then this is a problem with asynchronous cleasning process...
         if(!state.cleanseComplete_?.isDefined)
-          Effect.persist(FileCleanseProblemsEvent(problems, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
+          Effect.persist(FileCleanseProblemsEvent(problems, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.fileInfo.dataFile), Instant.now()))
             .thenNoReply
 
         //...if cleanse *is* complete, then this is a problem with asynchronous uploading process...
         else
-        Effect.persist(FileUploadProblemsEvent(problems, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.dataFile), Instant.now()))
+        Effect.persist(FileUploadProblemsEvent(problems, entityIdFor(state.originalOrder_!.cycleId, state.originalOrder_!.fileInfo.dataFile), Instant.now()))
           .thenNoReply
 
       case FileIngestion.FileIngestStateRetrieveOrder(replyTo) =>

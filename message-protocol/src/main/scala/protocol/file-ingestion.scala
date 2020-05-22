@@ -27,7 +27,6 @@ object FileIngestion {
     cycleId: String,
     userId: String,
     host: String,
-    dataFile: String,
     dbInfo: IngestFileOrder.DBInfo,
     fileInfo: IngestFileOrder.FileInfo
   ) extends Order
@@ -37,7 +36,7 @@ object FileIngestion {
   ) extends Order
   object IngestFileOrder {
     case class DBInfo(targetDatabase: String, targetSchema: String, targetTable: String)
-    case class FileInfo(delimiter: String, columns: List[ColumnInfo])
+    case class FileInfo(dataFile: String, delimiter: String, columns: List[ColumnInfo])
     case class ColumnInfo(columnName: String, protegrityDataType: String)
   }
   /** Order to receive notification that the external cleanse process has completed successfully */

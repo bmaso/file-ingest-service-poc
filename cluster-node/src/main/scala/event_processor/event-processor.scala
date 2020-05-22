@@ -64,6 +64,16 @@ object EventProcessor {
   }
 }
 
+/**
+ * Processes all events emitted within the cluster that are tagged with `tag`. Intended use is for the entire set
+ * of all entities of a specific type are sharded into N processor streams. That is, the entities automatically
+ * tag their events with one of N well-known tags. N event processes, run as a sharded daemon process, process the
+ * tagged events.
+ *
+ * A special database table maintains the current offset of each sharded event processor in the
+ * event stream. Thus when the event processor is re-started after migration to new node or passivate/activation
+ * cycle, it can pick up processing events where it left off.
+ */
 abstract class EventProcessorStream[Event: ClassTag](
                                                       system: ActorSystem[_],
                                                       executionContext: ExecutionContext,
