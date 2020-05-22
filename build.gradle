@@ -54,22 +54,8 @@ subprojects {
     jar.dependsOn copyDeps
 }
 
-// project specific
-project(':web-server') {
-    mainClassName = "bmaso.file_ingest_service_poc.web_server.MainCLI"
-
-    dependencies {
-    }
-
-    jar {
-        manifest {
-            attributes 'Main-Class': 'bmaso.file_ingest_service_poc.web_server.MainCLI'
-        }
-    }
-}
-
 project(':cluster-node') {
-    mainClassName = "bmaso.file_ingest_service_poc.cluster_node.MainCLI"
+    mainClassName = 'bmaso.file_ingest_service_poc.cluster_node.MainCLI'
 
     dependencies {
         compile project(':message-protocol')
