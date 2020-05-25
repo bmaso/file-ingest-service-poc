@@ -8,6 +8,7 @@ import akka.actor.typed.{ActorSystem, Behavior, SupervisorStrategy}
 import akka.persistence.typed.scaladsl.{Effect, EventSourcedBehavior, ReplyEffect, RetentionCriteria}
 import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, Entity, EntityTypeKey}
 import akka.persistence.typed.PersistenceId
+import bmaso.akka.JsonSerialization
 import bmaso.file_ingest_service_poc.protocol._
 import bmaso.akka.event_processor.EventProcessorSettings
 import org.slf4j.{Logger, LoggerFactory}
@@ -59,7 +60,7 @@ object FileIngestionEntity {
     def empty: InternalState = InternalState(None, None, None, None)
   }
 
-  sealed trait Event {
+  sealed trait Event extends JsonSerialization {
     def entityId: String
   }
   case class FileIngestionEnqueuedEvent(originalOrder: FileIngestion.IngestFileOrder, override val entityId: String, timestamp: Instant)

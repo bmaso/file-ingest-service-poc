@@ -9,8 +9,8 @@ import akka.cluster.sharding.typed.scaladsl.{ClusterSharding, EntityRef}
 import akka.dispatch.ExecutionContexts
 import bmaso.akka.event_processor._
 import bmaso.file_ingest_service_poc.cluster_node.{FileIngestionEntity, FileIngestionEventProcessorStream}
-import bmaso.file_ingest_service_poc.protocol.FileIngestion
 import org.h2.tools.Server
+import bmaso.file_ingest_service_poc.protocol.FileIngestion
 import slick.jdbc.H2Profile.api._
 
 import scala.concurrent.Await

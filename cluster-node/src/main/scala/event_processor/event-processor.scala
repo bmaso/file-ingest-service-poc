@@ -32,7 +32,7 @@ import slick.jdbc.H2Profile.api._
  * General purpose event processor infrastructure. Not specific to the any domain. *Is* specific
  * to Slick/H2.
  *
- * Note: mostly instsapired by Akka's official "ShoppingCart" CQRS example
+ * Note: mostly inspired by Akka's official "ShoppingCart" CQRS example
  */
 object EventProcessor {
 

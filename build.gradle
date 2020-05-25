@@ -66,8 +66,9 @@ project(':cluster-node') {
         compile group: 'com.typesafe.akka', name: "akka-cluster-typed_${scalaVersionMajor}", version: akkaVersion
         compile group: 'com.typesafe.akka', name: "akka-cluster-sharding-typed_${scalaVersionMajor}", version: akkaVersion
 
-        // Akka Persistence Journal & Persistence Query JDBC plugin
+        // Akka Persistence Journal & Persistence Query JDBC plugin, plus Jackson JSON serialization
         compile group: 'com.github.dnvriend', name: "akka-persistence-jdbc_${scalaVersionMajor}", version: akkaJdbcPersistenceJournalVersion
+        compile group: 'com.typesafe.akka', name: "akka-serialization-jackson_${scalaVersionMajor}", version: akkaVersion
 
         // H2 JDBC driver used in integration and CLI smoke tests
         compile group: 'com.h2database', name: 'h2', version: h2DatabaseLibraryVersion
@@ -97,20 +98,5 @@ project(':cluster-node') {
 
         // arguments to pass to the application
         args(['--http-port=8051', '--cluster-port=2551', '--host-h2-database-server', '--clear-h2-database'])
-    }
-}
-
-project(':message-protocol') {
-    mainClassName = "bmaso.file_ingest_service_poc.web_server.MainCLI"
-
-    dependencies {
-      compile "org.typelevel:cats_${scalaVersionMajor}:0.9.0"
-      compile "com.typesafe.akka:akka-actor-typed_${scalaVersionMajor}:2.6.5"
-    }
-
-    jar {
-        manifest {
-            attributes 'Main-Class': 'bmaso.file_ingest_service_poc.web_server.MainCLI'
-        }
     }
 }

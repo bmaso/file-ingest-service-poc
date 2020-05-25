@@ -11,8 +11,8 @@ import akka.http.scaladsl.model.ContentTypes._
 import akka.http.scaladsl.model.headers.`Content-Type`
 import akka.http.scaladsl.server.{Directives, Route}
 import akka.util.{ByteString, Timeout}
-import bmaso.file_ingest_service_poc.protocol.FileIngestion
 import org.slf4j.{Logger, LoggerFactory}
+import bmaso.file_ingest_service_poc.protocol.FileIngestion
 
 /**
  * Spray JSON declarations of how to (un)marshal message types

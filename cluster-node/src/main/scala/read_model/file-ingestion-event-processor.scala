@@ -10,7 +10,7 @@ import akka.cluster.sharding.typed.scaladsl.ClusterSharding
 import akka.persistence.typed.PersistenceId
 
 import bmaso.akka.event_processor.EventProcessorStream
-import bmaso.file_ingest_service_poc.protocol.{FileIngestion => FileIngestion_protocol}
+import bmaso.file_ingest_service_poc.protocol.{ FileIngestion => FileIngestion_protocol }
 
 /**
  * An object able to process any event emitted by a FileIngestionEntity during its lifecycle. Participates in the
