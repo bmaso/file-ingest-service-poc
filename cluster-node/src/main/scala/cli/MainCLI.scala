@@ -89,11 +89,16 @@ object MainExecutable {
     })(system.executionContext)
 
     //...invite the user to shut this server down...
-    println("Node Up! Press [ENTER] to quit")
-    Console.in.readLine()
 
-    log.info("Shutting down")
-    system.terminate
+    // NOTE: When launching from gradle, this simply does not work. There are spurious '\n' charcs being sent,
+    // which is shutting down the server. Created issue #9 in github project to address is ^C proves to not
+    // be good enough.
+
+    //   println("Node Up! Press [ENTER] to quit")
+    //   Console.in.readLine()
+    //
+    //   log.info("Shutting down")
+    //   system.terminate
   }
 
   def configWithClusterPort(clusterPort: Int): Config =
@@ -143,6 +148,9 @@ object MainExecutable {
                 "message" BYTEA NOT NULL,
                 PRIMARY KEY("persistence_id", "sequence_number")
               );
+              """,
+        sqlu"""
+                DROP INDEX IF EXISTS "journal_ordering_idx";
               """,
         sqlu"""
                 CREATE UNIQUE INDEX "journal_ordering_idx" ON "journal"("ordering");

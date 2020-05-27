@@ -57,8 +57,6 @@ subprojects {
 }
 
 project(':cluster-node') {
-    mainClassName = 'bmaso.file_ingest_service_poc.cluster_node.MainCLI'
-
     dependencies {
         compile project(':message-protocol')
         compile group: 'com.typesafe.akka', name: "akka-persistence-typed_${scalaVersionMajor}", version: akkaVersion
@@ -91,12 +89,38 @@ project(':cluster-node') {
         }
     }
 
-    task runSeedNodeAsDBHost(type: JavaExec) {
-        classpath = sourceSets.main.runtimeClasspath
+    // Run the normal "run" task using a specific set of command-line args
+    task runNode {
+        description '''
+\tSpawns an instance of the server node in the local cluster. Options:
+\t* Use "http-port" project property to set HTTP listen port; default 8051.
+\t  E.g., "./gradlew runNode -Phttp-port=123 ..."
+\t* Use "cluster-port" project property to set intra-cluster unique port for this node; default 2551.
+\t  Note the first node must use port 2551. E.g., "./gradlew runNode -Pcluster-port=123 ..."
+\t* Use "host-h2-database-server" set to true to make the node 
+'''
 
-        main = 'bmaso.file_ingest_service_poc.cluster_node.MainCLI'
+        int http_port = project.properties.containsKey('http-port') ? (project.properties['http-port'] as int) : 8051
+        int cluster_port = project.properties.containsKey('cluster-port') ? (project.properties['cluster-port'] as int) : 2551
 
-        // arguments to pass to the application
-        args(['--http-port=8051', '--cluster-port=2551', '--host-h2-database-server', '--clear-h2-database'])
+        String mainClassName = 'bmaso.file_ingest_service_poc.cluster_node.MainCLI'
+        List<String> argsArr = ["--http-port=$http_port", "--cluster-port=$cluster_port"]
+
+        if(project.hasProperty("host-h2-database-server")) {
+            argsArr += "--host-h2-database-server"
+        }
+
+        if(project.hasProperty("create-h2-database")) {
+            argsArr += "--create-h2-database"
+        }
+
+        runNode.finalizedBy(run)
+
+        doLast {
+            print("Args: $argsArr")
+
+            run.main = mainClassName
+            run.args = argsArr
+        }
     }
 }
